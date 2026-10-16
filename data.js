@@ -67,7 +67,7 @@ const NOTES = {
 };
 
 /* ---------- Stockage local ---------- */
-const KEY = 'mammodata.v1';
+const KEY = 'mammodata.v2';
 let DB = null;
 let session = null;
 
@@ -101,10 +101,13 @@ function seedData() {
     perdue: ['Dépistage', 'Diagnostic'], cloture: ['Dépistage', 'Diagnostic', 'Traitement', 'Suivi']
   };
   const patients = [];
-  for (let i = 1; i <= 190; i++) {
+  const W = [14, 12, 7, 8, 7, 7, 6, 6, 6, 6, 6, 5, 5, 5];
+  const WT = W.reduce((a, b) => a + b, 0);
+  const pickCentre = () => { let y = r() * WT; for (let j = 0; j < CENTRES.length; j++) { y -= W[j]; if (y < 0) return CENTRES[j]; } return CENTRES[0]; };
+  for (let i = 1; i <= 420; i++) {
     let x = r(), st = 'negatif', acc = 0;
     for (const [k, p] of dist) { acc += p; if (x <= acc) { st = k; break; } }
-    const centre = CENTRES[Math.floor(r() * r() * CENTRES.length)];
+    const centre = pickCentre();
     const back = st === 'perdue' ? rnd(170, 360) : (st === 'traitement' || st === 'cloture') ? rnd(90, 360) : rnd(4, 360);
     let d = addDays(TODAY, -back);
     const cons = [];

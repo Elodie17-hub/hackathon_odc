@@ -123,34 +123,29 @@ function groupedBars(labels, series) {
   return `<svg viewBox="0 0 ${W} ${H}" class="chart" role="img" aria-label="Répartition par tranche d'âge">${g}</svg>`;
 }
 const TILE_POS = { 'Nord': [1, 0], 'Sahel': [2, 0], 'Boucle du Mouhoun': [0, 1], 'Centre-Nord': [2, 1], 'Plateau-Central': [3, 1], 'Est': [4, 1], 'Hauts-Bassins': [0, 2], 'Centre-Ouest': [1, 2], 'Centre': [2, 2], 'Centre-Est': [3, 2], 'Cascades': [0, 3], 'Sud-Ouest': [1, 3], 'Centre-Sud': [2, 3] };
-function tileMap(values, f = v => v) {
-  const max = Math.max(1, ...Object.values(values)); const cells = [];
-  for (let row = 0; row < 4; row++) for (let col = 0; col < 5; col++) {
-    const reg = Object.keys(TILE_POS).find(k => TILE_POS[k][0] === col && TILE_POS[k][1] === row);
-    if (!reg) { cells.push('<div class="tile empty"></div>'); continue; }
-    const v = values[reg] || 0, t = v / max; const stops = [[253, 240, 246], [247, 141, 176], [107, 82, 184], [46, 42, 120]];
-    const s = t * 3, i = Math.min(2, Math.floor(s)), k = s - i; const c = stops[i].map((a, n) => Math.round(a + (stops[i + 1][n] - a) * k));
-    cells.push(`<div class="tile" style="background:rgb(${c});color:${t > .45 ? '#fff' : '#1F1B4D'}" title="${reg} : ${f(v)}"><span>${reg}</span><b>${f(v)}</b></div>`);
-  }
-  return `<div class="tile-map">${cells.join('')}</div><div class="scale"><span>Faible</span><i></i><span>Élevé</span></div><p class="muted small" style="margin:8px 0 0">Carte schématique des 13 régions.</p>`;
+/* ---------- Carte du Burkina Faso (tracés dans bf-map.js) ---------- */
+const MAP_STEPS = ['#E0DFEB', '#C0BFD7', '#9794BC', '#625F9A', '#2E2A78'];
+function bfMap(values, f = v => v, label = '') {
+  const max = Math.max(1, ...Object.values(values));
+  const lvl = v => v ? Math.ceil(v / max * 4) : 0;
+  const regs = Object.entries(BF_MAP.regions);
+  const paths = regs.map(([n, r]) => { const v = values[n] || 0; return `<path class="bf-reg" d="${r.d}" fill="${MAP_STEPS[lvl(v)]}" data-name="${esc(n)}" data-val="${esc(f(v))}" data-label="${esc(label)}"/>`; }).join('');
+  const labs = regs.map(([n, r]) => { const v = values[n] || 0; return `<text class="bf-lab" x="${r.cx}" y="${r.cy}" fill="${lvl(v) >= 3 ? '#fff' : '#1F1B4D'}">${esc(f(v))}</text>`; }).join('');
+  return `<div class="bf-map"><svg viewBox="${BF_MAP.viewBox}" role="img" aria-label="Carte du Burkina Faso par région">${paths}<path class="bf-hl" d=""/>${labs}</svg><div class="maptip" hidden></div></div>
+  <div class="scale"><span>Faible</span>${MAP_STEPS.map(c => `<i style="background:${c}"></i>`).join('')}<span>Élevé</span></div>
+  <p class="muted small" style="margin:8px 0 0">Survolez une région pour voir le détail.</p>`;
 }
-const DONUT_COLORS = ['#2E2A78', '#4B3B9A', '#6B52B8', '#EC4083', '#F78DB0', '#9A8AD6', '#C9C9D9'];
-function donutChart(vals) {
-  const all = Object.entries(vals).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]);
-  const total = all.reduce((s, [, n]) => s + n, 0);
-  if (!total) return '<p class="muted">Aucune donnée.</p>';
-  const items = all.slice(0, 6).map(([l, n]) => ({ l, n }));
-  const rest = all.slice(6).reduce((s, [, n]) => s + n, 0);
-  if (rest) items.push({ l: 'Autres régions', n: rest });
-  const R = 70, C = 2 * Math.PI * R; let off = 0;
-  const arcs = items.map((it, i) => {
-    const len = it.n / total * C;
-    const s = `<circle cx="90" cy="90" r="${R}" fill="none" stroke="${DONUT_COLORS[i]}" stroke-width="26" stroke-dasharray="${len} ${C - len}" stroke-dashoffset="${-off}" transform="rotate(-90 90 90)"><title>${esc(it.l)} : ${it.n}</title></circle>`;
-    off += len; return s;
-  }).join('');
-  return `<div class="donut-wrap"><svg viewBox="0 0 180 180" class="donut" role="img" aria-label="Dépistages par région">${arcs}<text x="90" y="88" text-anchor="middle" class="d-val">${nf(total)}</text><text x="90" y="106" text-anchor="middle" class="d-lab">dépistages</text></svg>
-  <ul class="donut-legend">${items.map((it, i) => `<li><i style="background:${DONUT_COLORS[i]}"></i><span>${esc(it.l)}</span><b>${nf(it.n)} <small>(${Math.round(it.n / total * 100)} %)</small></b></li>`).join('')}</ul></div>`;
-}
+let mapTip = null;
+document.addEventListener('mousemove', e => {
+  const r = e.target.closest && e.target.closest('.bf-reg');
+  if (!r) { if (mapTip) { mapTip.tip.hidden = true; mapTip.hl.setAttribute('d', ''); mapTip = null; } return; }
+  const box = r.closest('.bf-map'), tip = $('.maptip', box), hl = $('.bf-hl', box), b = box.getBoundingClientRect();
+  mapTip = { tip, hl }; hl.setAttribute('d', r.getAttribute('d'));
+  tip.innerHTML = `<b>${esc(r.dataset.name)}</b><span>${esc(r.dataset.label)} : <strong>${esc(r.dataset.val)}</strong></span>`;
+  tip.hidden = false;
+  tip.style.left = Math.max(0, Math.min(e.clientX - b.left + 14, b.width - tip.offsetWidth - 4)) + 'px';
+  tip.style.top = (e.clientY - b.top + 14) + 'px';
+});
 function monthsBack(n) { const out = []; for (let i = n - 1; i >= 0; i--) { const d = new Date(TODAY.getFullYear(), TODAY.getMonth() - i, 1); out.push({ key: `${d.getFullYear()}-${pad(d.getMonth() + 1)}`, label: MOIS[d.getMonth()] }); } return out; }
 const AGE_GROUPS = [['< 30', 0, 29], ['30-39', 30, 39], ['40-49', 40, 49], ['50-59', 50, 59], ['60 +', 60, 200]];
 
@@ -276,7 +271,7 @@ VIEWS.dashboard = (r, v) => {
     ${card('', 'chart', k.pos, 'Taux de positivité')}${card('info', 'shield', nf(k.trt), 'Patientes en traitement')}${card('grey', 'clock', nf(k.per), 'Perdues de vue')}</div>
   <div class="grid g-21" style="margin-bottom:18px">
     <div class="card"><h3>Évolution mensuelle</h3><div class="legend"><span><i style="background:var(--indigo)"></i>Dépistages</span><span><i style="background:var(--rose)"></i>Cas confirmés</span></div>${lineChart(months.map(m => m.label), [{ name: 'Dépistages', color: '#2E2A78', values: dep }, { name: 'Cas confirmés', color: '#EC4083', values: cas }])}</div>
-    <div class="card"><h3>Répartition par tranche d'âge</h3><div class="legend"><span><i style="background:var(--violet-l)"></i>Dépistées</span><span><i style="background:var(--rose)"></i>Cas</span></div>${groupedBars(AGE_GROUPS.map(g => g[0]), [{ name: 'Dépistées', color: '#6B52B8', values: ageDep }, { name: 'Cas', color: '#EC4083', values: ageCas }])}</div></div>
+        <div class="card"><h3>Répartition par tranche d'âge</h3><div class="legend"><span><i style="background:var(--indigo)"></i>Dépistées</span><span><i style="background:var(--rose)"></i>Cas</span></div>${groupedBars(AGE_GROUPS.map(g => g[0]), [{ name: 'Dépistées', color: '#2E2A78', values: ageDep }, { name: 'Cas', color: '#EC4083', values: ageCas }])}</div></div>
     <div class="card"><h3>Dépistages par région</h3>${donutChart(regVals)}</div>`}`;
 };
 
@@ -435,14 +430,15 @@ function centreStats(list) {
 VIEWS.stats = (r, v) => {
   const f = state.st, all = role().scope === 'all', list = filterByPeriod(scoped(), f.period, all ? f.region : ''), k = kpis(list);
   const metric = { dep: ['Dépistages', p => true, n => n], cas: ['Cas confirmés', isCase, n => n], pos: ['Taux de positivité (%)', null, n => n + ' %'] }[f.metric];
-  let vals; if (f.metric === 'pos') { const d = byRegion(list, () => true), c = byRegion(list, isCase); vals = {}; REGIONS.forEach(x => vals[x] = d[x] ? Math.round(c[x] / d[x] * 100) : 0); } else vals = byRegion(list, metric[1]);
+  const natList = filterByPeriod(DB.patients, f.period, all ? f.region : '');
+  let vals; if (f.metric === 'pos') { const d = byRegion(natList, () => true), c = byRegion(natList, isCase); vals = {}; REGIONS.forEach(x => vals[x] = d[x] ? Math.round(c[x] / d[x] * 100) : 0); } else vals = byRegion(natList, metric[1]);
   const maxV = Math.max(1, ...Object.values(vals)); const rows = centreStats(list);
   v.innerHTML = `${head('Statistiques & cartographie', 'Comparaison par région et par centre', `<button class="btn ghost" data-act="export-csv">${ico('download')} Exporter en CSV</button><button class="btn" data-act="print">${ico('print')} Exporter en PDF</button>`)}
   <div class="card filters flat"><select data-f="st.period" data-num>${optList([[3, '3 derniers mois'], [6, '6 derniers mois'], [12, '12 derniers mois']], f.period)}</select>${all ? `<select data-f="st.region">${optList(REGIONS, f.region, 'Toutes les régions')}</select>` : ''}
     <select data-f="st.metric"><option value="dep" ${f.metric === 'dep' ? 'selected' : ''}>Indicateur : dépistages</option><option value="cas" ${f.metric === 'cas' ? 'selected' : ''}>Indicateur : cas confirmés</option><option value="pos" ${f.metric === 'pos' ? 'selected' : ''}>Indicateur : taux de positivité</option></select></div>
   ${list.length === 0 ? `<div class="card">${emptyState('chart', 'Aucune donnée', 'Aucun dossier ne correspond à ces filtres.')}</div>` : `
   <div class="grid g4" style="margin-bottom:18px"><div class="card mini"><span>Dépistées</span><b>${nf(k.dep)}</b></div><div class="card mini"><span>Cas confirmés</span><b>${nf(k.cas)}</b></div><div class="card mini"><span>Positivité</span><b>${k.pos}</b></div><div class="card mini"><span>En traitement</span><b>${nf(k.trt)}</b></div></div>
-  <div class="grid g2" style="margin-bottom:18px"><div class="card"><h3>Carte — ${metric[0]}</h3>${tileMap(vals, metric[2])}</div>
+  <div class="grid g2" style="margin-bottom:18px"><div class="card"><h3>Carte — ${metric[0]}</h3>${bfMap(vals, metric[2], metric[0])}</div>
   <div class="card"><h3>Classement des régions — ${metric[0]}</h3>${Object.entries(vals).sort((a, b) => b[1] - a[1]).map(([rg, n]) => `<div class="bar-row rose"><span>${rg}</span><div class="tr"><i style="width:${n / maxV * 100}%"></i></div><span class="v">${metric[2](n)}</span></div>`).join('')}</div></div>
   <div class="card"><h3>Détail par centre</h3><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Centre</th><th>Région</th><th class="num">Dépistées</th><th class="num">Suspects</th><th class="num">Confirmés</th><th class="num">Positivité</th><th class="num">En traitement</th></tr></thead><tbody>${rows.map(x => `<tr><td>${esc(x.c.nom)}</td><td>${esc(x.c.region)}</td><td class="num">${x.dep}</td><td class="num">${x.sus}</td><td class="num">${x.cas}</td><td class="num">${x.pos}</td><td class="num">${x.trt}</td></tr>`).join('')}</tbody></table></div></div>`}`;
 };
