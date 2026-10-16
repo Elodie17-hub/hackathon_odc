@@ -24,7 +24,7 @@ const MOIS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août'
 const state = {
   dash: { period: 12, region: '' },
   pl: { q: '', statut: '', centre: '', periode: '', page: 1 },
-  sv: { tab: 'avenir' },
+  sv: { q: '', statut: '', centre: '', n: 15 },
   st: { period: 12, region: '', metric: 'dep' },
   fiche: { tab: 'resume', last: null },
   au: { filter: '' }
@@ -121,6 +121,20 @@ function groupedBars(labels, series) {
     series.forEach((s, j) => { const bx = cx - (series.length * bw) / 2 + j * bw; g += `<rect x="${bx}" y="${y(s.values[i])}" width="${bw - 2}" height="${H - B - y(s.values[i])}" rx="4" fill="${s.color}"><title>${s.name} : ${s.values[i]}</title></rect>`; });
   });
   return `<svg viewBox="0 0 ${W} ${H}" class="chart" role="img" aria-label="Répartition par tranche d'âge">${g}</svg>`;
+}
+const DONUT_COLORS = ['#2E2A78', '#EC4083', '#625F9A', '#F28DB5', '#9794BC', '#B8266A', '#4B47A0', '#F7B6D0', '#7A3E9D', '#C0BFD7', '#D94F8C', '#3A5BA0', '#8E7CC3'];
+function donutChart(map) {
+  const entries = Object.entries(map).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]);
+  const total = entries.reduce((s, [, n]) => s + n, 0);
+  if (!total) return '<p class="muted">Aucune donnée.</p>';
+  const R = 70, C = 2 * Math.PI * R; let off = 0, arcs = '';
+  entries.forEach(([k, n], i) => {
+    const len = n / total * C;
+    arcs += `<circle cx="100" cy="100" r="${R}" fill="none" stroke="${DONUT_COLORS[i % DONUT_COLORS.length]}" stroke-width="30" stroke-dasharray="${len} ${C - len}" stroke-dashoffset="${-off}" transform="rotate(-90 100 100)"><title>${esc(k)} : ${n}</title></circle>`;
+    off += len;
+  });
+  const legend = entries.map(([k, n], i) => `<li><i style="background:${DONUT_COLORS[i % DONUT_COLORS.length]}"></i><span>${esc(k)}</span><b>${nf(n)} <small>${(n / total * 100).toFixed(0)} %</small></b></li>`).join('');
+  return `<div class="donut-wrap"><svg viewBox="0 0 200 200" class="donut" role="img" aria-label="Répartition par région">${arcs}<text x="100" y="104" text-anchor="middle" class="d-val">${nf(total)}</text><text x="100" y="122" text-anchor="middle" class="d-lab">dépistages</text></svg><ul class="donut-legend">${legend}</ul></div>`;
 }
 const TILE_POS = { 'Nord': [1, 0], 'Sahel': [2, 0], 'Boucle du Mouhoun': [0, 1], 'Centre-Nord': [2, 1], 'Plateau-Central': [3, 1], 'Est': [4, 1], 'Hauts-Bassins': [0, 2], 'Centre-Ouest': [1, 2], 'Centre': [2, 2], 'Centre-Est': [3, 2], 'Cascades': [0, 3], 'Sud-Ouest': [1, 3], 'Centre-Sud': [2, 3] };
 /* ---------- Carte du Burkina Faso (tracés dans bf-map.js) ---------- */
@@ -396,31 +410,59 @@ function viewFiche(id, v) {
 }
 function consModal(id) {
   const p = DB.patients.find(x => x.id === id);
-  openModal('Ajouter une consultation', `<div class="form-grid"><div class="fld"><label>Date</label><input id="cm-date" type="date" value="${iso(TODAY)}" max="${iso(TODAY)}"></div><div class="fld"><label>Type de consultation</label><select id="cm-type">${optList(TYPES_CONSULT, 'Suivi')}</select></div>
+  openModal('Ajouter une consultation', `<div class="form-grid"><div class="fld"><label>Date</label><input id="cm-date" type="date" value="${iso(TODAY)}" max="${iso(TODAY)}"></div><div class="fld"><label>Médecin / agent consultant</label><input id="cm-med" type="text" value="${esc(session.name)}"></div><div class="fld"><label>Type de consultation</label><select id="cm-type">${optList(TYPES_CONSULT, 'Suivi')}</select></div>
     <div class="fld"><label>Statut après consultation</label><select id="cm-st">${optList(Object.keys(STATUTS).map(k => [k, STATUTS[k].label]), p.statut)}</select></div><div class="fld"><label>Prochain rendez-vous</label><input id="cm-rdv" type="date" min="${iso(TODAY)}" value="${p.prochainRdv && p.prochainRdv >= iso(TODAY) ? p.prochainRdv : ''}"></div>
     <div class="fld" style="grid-column:1/-1"><label>Note clinique</label><textarea id="cm-note" rows="3" placeholder="Observations, décisions, orientation…"></textarea></div></div>`,
     `<button class="btn ghost" data-act="close-modal">Annuler</button><button class="btn accent" data-act="save-cons" data-id="${id}">Enregistrer</button>`);
 }
 function saveCons(id) {
   const p = DB.patients.find(x => x.id === id), date = $('#cm-date').value; if (!date) return toast('Indiquez la date de la consultation.', 'err');
-  p.consultations.push({ date, type: $('#cm-type').value, centre: session.centre, note: $('#cm-note').value.trim() || NOTES[$('#cm-type').value] });
+  p.consultations.push({ date, type: $('#cm-type').value, centre: session.centre, medecin: ($('#cm-med').value.trim() || session.name), note: $('#cm-note').value.trim() || NOTES[$('#cm-type').value] });
   p.consultations.sort((a, b) => a.date.localeCompare(b.date)); p.statut = $('#cm-st').value; p.prochainRdv = $('#cm-rdv').value || null;
   saveDB(); audit('Modification de dossier', `${id} : consultation ajoutée`); closeModal(); toast('Consultation ajoutée au dossier.'); refresh();
 }
 
-/* ---------- Suivi et rappels ---------- */
+/* ---------- Suivi : historique des consultations ---------- */
 VIEWS.suivi = (r, v) => {
-  const list = scoped(), t = iso(TODAY), in30 = iso(addDays(TODAY, 30));
-  const avenir = list.filter(p => p.prochainRdv && p.prochainRdv >= t && p.prochainRdv <= in30).sort((a, b) => a.prochainRdv.localeCompare(b.prochainRdv));
-  const manques = list.filter(p => p.statut === 'perdue' || (p.prochainRdv && p.prochainRdv < t && ['suspect', 'confirme', 'traitement'].includes(p.statut))).sort((a, b) => (a.prochainRdv || '').localeCompare(b.prochainRdv || ''));
-  const alertes = list.filter(p => p.statut === 'suspect' && daysBetween(lastCons(p).date, TODAY) > 14).sort((a, b) => lastCons(a).date.localeCompare(lastCons(b).date));
-  const tabs = { avenir: ['RDV à venir', avenir], manques: ['RDV manqués et perdues de vue', manques], alertes: ['Alertes cas suspects', alertes] };
-  const cur = tabs[state.sv.tab], rows = cur[1];
-  const rel = p => { if (!p.prochainRdv) return '—'; const n = daysBetween(TODAY, p.prochainRdv); return n >= 0 ? (n === 0 ? 'Aujourd\'hui' : `Dans ${n} j`) : `En retard de ${-n} j`; };
-  v.innerHTML = `${head('Suivi & rappels', 'Rendez-vous, patientes à relancer et cas suspects non confirmés')}
-  <div class="grid g3" style="margin-bottom:18px"><div class="card kpi"><div class="ic info">${ico('calendar')}</div><div><b>${avenir.length}</b><span>RDV dans les 30 jours</span></div></div><div class="card kpi"><div class="ic grey">${ico('clock')}</div><div><b>${manques.length}</b><span>À relancer</span></div></div><div class="card kpi"><div class="ic warn">${ico('alert')}</div><div><b>${alertes.length}</b><span>Suspects à confirmer</span></div></div></div>
-  <div class="card"><div class="tabs">${Object.entries(tabs).map(([k, [l, a]]) => `<button class="${k === state.sv.tab ? 'on' : ''}" data-act="sv-tab" data-t="${k}">${l}<span class="cnt">${a.length}</span></button>`).join('')}</div>
-  ${rows.length === 0 ? emptyState('check', 'Rien à signaler', 'Aucune patiente dans cette catégorie pour le moment.') : `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Patiente</th><th>Centre</th><th>Statut</th><th>${state.sv.tab === 'alertes' ? 'Dernière consultation' : 'Rendez-vous'}</th><th>Échéance</th><th></th></tr></thead><tbody>${rows.slice(0, 40).map(p => `<tr data-act="open" data-id="${p.id}"><td class="who"><b>${esc(p.nom.toUpperCase())} ${esc(p.prenoms[0])}.</b><span>${p.id} · ${maskTel(p.tel)}</span></td><td>${esc(centreName(p.centre))}</td><td>${badge(p.statut)}</td><td>${fmt(state.sv.tab === 'alertes' ? lastCons(p).date : p.prochainRdv)}</td><td>${state.sv.tab === 'alertes' ? `${daysBetween(lastCons(p).date, TODAY)} j sans confirmation` : rel(p)}</td><td>${ico('chev')}</td></tr>`).join('')}</tbody></table></div>${rows.length > 40 ? `<p class="muted small" style="margin-top:12px">40 premières lignes affichées sur ${rows.length}.</p>` : ''}`}</div>`;
+  const f = state.sv, t = iso(TODAY), q = (f.q || '').trim().toLowerCase();
+  const base = scoped();
+  const rel = p => { if (!p.prochainRdv) return '—'; const n = daysBetween(TODAY, p.prochainRdv); return `${fmt(p.prochainRdv)} (${n >= 0 ? (n === 0 ? 'aujourd\'hui' : `dans ${n} j`) : `en retard de ${-n} j`})`; };
+  const list = base.filter(p => (!q || `${p.nom} ${p.prenoms} ${p.id} ${p.tel}`.toLowerCase().includes(q)) && (!f.statut || p.statut === f.statut) && (!f.centre || p.consultations.some(c => c.centre === f.centre)))
+    .sort((a, b) => lastCons(b).date.localeCompare(lastCons(a).date));
+  const nCons = list.reduce((s, p) => s + p.consultations.length, 0);
+  const aVenir = list.filter(p => p.prochainRdv && p.prochainRdv >= t).length;
+  const relancer = list.filter(p => p.statut === 'perdue' || (p.prochainRdv && p.prochainRdv < t && ['suspect', 'confirme', 'traitement'].includes(p.statut))).length;
+  const cs = role().scope === 'all' ? CENTRES : CENTRES.filter(c => base.some(p => p.consultations.some(x => x.centre === c.id)));
+  const shown = list.slice(0, f.n || 15);
+  const consRow = (c, i, p) => {
+    const ce = centreOf(c.centre);
+    return `<li class="hist-item"><div class="hist-dot"></div><div class="hist-body">
+      <div class="row spread"><b>${esc(c.type)}</b><span class="muted small">Consultation n°${i + 1} · ${fmt(c.date)}</span></div>
+      <dl class="dl" style="margin:6px 0"><dt>Lieu</dt><dd>${esc(ce.nom)} — ${esc(ce.ville || '')}, région ${esc(ce.region)}</dd>
+      <dt>Médecin</dt><dd>${esc(c.medecin || 'Non renseigné')}</dd>
+      <dt>Observations</dt><dd>${esc(c.note || '—')}</dd></dl></div></li>`;
+  };
+  const card = p => {
+    const dp = p.depistage || {}, last = lastCons(p);
+    return `<details class="card hist-card" style="margin-bottom:12px"><summary style="cursor:pointer;list-style:none">
+      <div class="row spread"><div class="who"><b>${esc(p.nom.toUpperCase())} ${esc(p.prenoms)}</b><span>${p.id} · ${ageOf(p.naissance)} ans · ${maskTel(p.tel)} · ${esc(p.region)}</span></div>
+      <div class="row" style="gap:10px">${badge(p.statut)}<span class="tag indigo">${p.consultations.length} consultation(s)</span></div></div>
+      <p class="muted small" style="margin:6px 0 0">Dernière consultation : ${fmt(last.date)} — ${esc(centreName(last.centre))}${last.medecin ? ' — ' + esc(last.medecin) : ''}</p></summary>
+      <div style="margin-top:14px"><dl class="dl"><dt>Prochain rendez-vous</dt><dd>${rel(p)}</dd>
+      <dt>Imagerie / BI-RADS</dt><dd>${esc(dp.imagerie || '—')}${dp.birads != null ? ` · BI-RADS ${dp.birads} (${BIRADS[dp.birads]})` : ''}</dd>
+      <dt>Diagnostic</dt><dd>${p.diagnostic ? `${esc(p.diagnostic.type)} · stade ${esc(p.diagnostic.stade)} (${esc(p.diagnostic.tnm)}) · ${esc(p.diagnostic.hormonal)}` : 'Aucun'}</dd>
+      <dt>Traitement</dt><dd>${p.traitement ? ['chirurgie', 'chimio', 'radio', 'hormono'].filter(k => p.traitement[k]).join(', ') || '—' : 'Aucun'}</dd></dl>
+      <h4 class="sub-title">Historique des consultations</h4>
+      <ul class="hist">${p.consultations.slice().reverse().map((c, i, a) => consRow(c, a.length - 1 - i, p)).join('')}</ul>
+      <button class="btn ghost" data-act="open" data-id="${p.id}">Ouvrir le dossier complet</button></div></details>`;
+  };
+  v.innerHTML = `${head('Suivi & historique', 'Historique complet des consultations de chaque patiente : lieu, date, médecin et observations')}
+  <div class="grid g3" style="margin-bottom:18px"><div class="card kpi"><div class="ic info">${ico('calendar')}</div><div><b>${nf(nCons)}</b><span>Consultations (${list.length} patiente(s))</span></div></div><div class="card kpi"><div class="ic grey">${ico('clock')}</div><div><b>${aVenir}</b><span>RDV à venir</span></div></div><div class="card kpi"><div class="ic warn">${ico('alert')}</div><div><b>${relancer}</b><span>À relancer</span></div></div></div>
+  <div class="card filters flat"><input type="search" data-f="sv.q" value="${esc(f.q || '')}" placeholder="Rechercher (nom, n° dossier, téléphone)" aria-label="Recherche">
+  <select data-f="sv.statut" aria-label="Statut">${optList(Object.keys(STATUTS).map(k => [k, STATUTS[k].label]), f.statut, 'Tous les statuts')}</select>
+  <select data-f="sv.centre" aria-label="Lieu">${optList(cs.map(c => [c.id, c.nom]), f.centre, 'Tous les lieux')}</select></div>
+  ${list.length === 0 ? `<div class="card">${emptyState('check', 'Aucun résultat', 'Aucune patiente ne correspond à ces filtres.')}</div>` : shown.map(card).join('')}
+  ${list.length > shown.length ? `<p style="text-align:center"><button class="btn ghost" data-act="sv-more">Afficher plus (${list.length - shown.length} restantes)</button></p>` : ''}`;
 };
 
 /* ---------- Statistiques et cartographie ---------- */
@@ -499,7 +541,7 @@ const ACT = {
   tab: t => { state.fiche.tab = t.dataset.t; refresh(); },
   'add-cons': t => consModal(t.dataset.id), 'save-cons': t => saveCons(t.dataset.id),
   print: () => window.print(),
-  'sv-tab': t => { state.sv.tab = t.dataset.t; refresh(); },
+  'sv-more': () => { state.sv.n += 15; refresh(); },
   'export-csv': exportCSV, centre: t => centreModal(t.dataset.id),
   'new-user': userModal,
   'save-user': () => {
@@ -533,7 +575,7 @@ document.addEventListener('input', e => {
 document.addEventListener('change', e => {
   const t = e.target;
   if (t.dataset.d && draft) { draft.data[t.dataset.d] = t.type === 'checkbox' ? t.checked : t.value; if (t.dataset.rr) renderStep(); }
-  if (t.dataset.f) { const [a, b] = t.dataset.f.split('.'); state[a][b] = t.hasAttribute('data-num') ? Number(t.value) : t.value; if (a === 'pl') state.pl.page = 1; refresh(); }
+  if (t.dataset.f) { const [a, b] = t.dataset.f.split('.'); state[a][b] = t.hasAttribute('data-num') ? Number(t.value) : t.value; if (a === 'pl') state.pl.page = 1; if (a === 'sv') state.sv.n = 15; refresh(); }
   if (t.matches('[data-doc]') && t.files[0]) { const p = DB.patients.find(x => x.id === parseRoute().id); p.documents.push({ nom: t.files[0].name, date: iso(TODAY) }); saveDB(); audit('Ajout de document', p.id); toast('Document ajouté au dossier.'); refresh(); }
 });
 document.addEventListener('submit', e => { if (e.target.id === 'login-form') submitLogin(e); });

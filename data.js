@@ -67,7 +67,7 @@ const NOTES = {
 };
 
 /* ---------- Stockage local ---------- */
-const KEY = 'mammodata.v2';
+const KEY = 'mammodata.v3';
 let DB = null;
 let session = null;
 
@@ -100,6 +100,7 @@ function seedData() {
     traitement: ['Dépistage', 'Examen complémentaire', 'Diagnostic', 'Traitement'],
     perdue: ['Dépistage', 'Diagnostic'], cloture: ['Dépistage', 'Diagnostic', 'Traitement', 'Suivi']
   };
+  const MEDS = ['Dr Issouf Compaoré', 'Dr Mariam Zongo', 'Dr Habibou Ouattara', 'Dr Pauline Kaboré', 'Dr Adama Traoré', 'Dr Clarisse Ilboudo', 'Dr Boukary Sawadogo', 'Dr Fatimata Nikiéma', 'Dr Salif Ouédraogo', 'Dr Awa Konaté'];
   const patients = [];
   const W = [14, 12, 7, 8, 7, 7, 6, 6, 6, 6, 6, 5, 5, 5];
   const WT = W.reduce((a, b) => a + b, 0);
@@ -115,7 +116,7 @@ function seedData() {
       if (k > 0) d = addDays(d, rnd(8, 45));
       if (d > TODAY) d = addDays(TODAY, -rnd(0, 6));
       const t = TYPES[st][k];
-      cons.push({ date: iso(d), type: t, centre: k > 0 && yn(.25) ? 'c-yalgado' : centre.id, note: NOTES[t] });
+      cons.push({ date: iso(d), type: t, centre: k > 0 && yn(.25) ? 'c-yalgado' : centre.id, medecin: pick(MEDS), note: NOTES[t] });
     }
     const hasDx = st === 'confirme' || st === 'traitement' || ((st === 'perdue' || st === 'cloture') && yn(.6));
     const stade = hasDx ? pick(['I', 'II', 'II', 'III', 'III', 'IV']) : null;
