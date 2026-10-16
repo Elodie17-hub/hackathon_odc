@@ -496,8 +496,23 @@ function exportCSV() {
 VIEWS.centres = (r, v) => {
   const list = role().scope === 'all' ? CENTRES : CENTRES.filter(c => c.id === session.centre);
   const rows = list.map(c => { const l = DB.patients.filter(p => p.centre === c.id), k = kpis(l); return { c, k, agents: DB.users.filter(u => u.centre === c.id).length }; });
-  v.innerHTML = `${head('Centres de santé', `${rows.length} centre(s)`)}<div class="card"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Centre</th><th>Type</th><th>Région</th><th class="num">Agents</th><th class="num">Dossiers</th><th class="num">Cas confirmés</th><th></th></tr></thead><tbody>${rows.map(x => `<tr data-act="centre" data-id="${x.c.id}"><td><b>${esc(x.c.nom)}</b></td><td><span class="tag indigo">${x.c.type}</span></td><td>${esc(x.c.region)}</td><td class="num">${x.agents}</td><td class="num">${x.k.dep}</td><td class="num">${x.k.cas}</td><td>${ico('chev')}</td></tr>`).join('')}</tbody></table></div></div>`;
+  v.innerHTML = `${head('Centres de santé', `${rows.length} centre(s)`, role().scope === 'all' ? `<button class="btn accent" data-act="new-centre">${ico('plus')} Ajouter un centre</button>` : '')}<div class="card"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Centre</th><th>Type</th><th>Région</th><th class="num">Agents</th><th class="num">Dossiers</th><th class="num">Cas confirmés</th><th></th></tr></thead><tbody>${rows.map(x => `<tr data-act="centre" data-id="${x.c.id}"><td><b>${esc(x.c.nom)}</b></td><td><span class="tag indigo">${x.c.type}</span></td><td>${esc(x.c.region)}</td><td class="num">${x.agents}</td><td class="num">${x.k.dep}</td><td class="num">${x.k.cas}</td><td>${ico('chev')}</td></tr>`).join('')}</tbody></table></div></div>`;
 };
+function newCentreModal() {
+  openModal('Ajouter un centre de santé', `<div class="form-grid"><div class="fld"><label>Nom du centre</label><input id="nc-nom" type="text" placeholder="Ex. CMA de Tougan"></div>
+  <div class="fld"><label>Type</label><select id="nc-type">${optList(['CHU', 'CHR', 'CMA', 'CM', 'CSPS', 'Clinique privée'], 'CMA')}</select></div>
+  <div class="fld"><label>Région</label><select id="nc-region">${optList(REGIONS, '', 'Sélectionner…')}</select></div>
+  <div class="fld"><label>Ville</label><input id="nc-ville" type="text" placeholder="Ville ou localité"></div></div>`,
+    '<button class="btn ghost" data-act="close-modal">Annuler</button><button class="btn accent" data-act="save-centre">Enregistrer</button>');
+}
+function saveCentre() {
+  const nom = $('#nc-nom').value.trim(), region = $('#nc-region').value, ville = $('#nc-ville').value.trim(), type = $('#nc-type').value;
+  if (!nom || !region || !ville) return toast('Renseignez le nom, la région et la ville.', 'err');
+  if (CENTRES.some(c => c.nom.toLowerCase() === nom.toLowerCase())) return toast('Un centre portant ce nom existe déjà.', 'err');
+  const c = { id: 'c-' + Date.now().toString(36), nom, region, ville, type };
+  CENTRES.push(c); (DB.customCentres = DB.customCentres || []).push(c);
+  saveDB(); audit('Ajout de centre', nom); closeModal(); toast('Centre de santé ajouté.'); refresh();
+}
 function centreModal(id) {
   const c = centreOf(id), l = DB.patients.filter(p => p.centre === id), k = kpis(l), ag = DB.users.filter(u => u.centre === id), ms = monthsBack(6);
   openModal(c.nom, `<div class="grid g3" style="margin-bottom:16px"><div class="mini"><span>Dossiers</span><b>${k.dep}</b></div><div class="mini"><span>Cas confirmés</span><b>${k.cas}</b></div><div class="mini"><span>Positivité</span><b>${k.pos}</b></div></div>
@@ -539,7 +554,7 @@ const ACT = {
   'dup-ok': () => { draft.dupOk = true; draft.dup = null; draft.step = 2; viewNew($('#view')); },
   'save-patient': savePatient,
   tab: t => { state.fiche.tab = t.dataset.t; refresh(); },
-  'add-cons': t => consModal(t.dataset.id), 'save-cons': t => saveCons(t.dataset.id),
+  'new-centre': () => newCentreModal(), 'save-centre': () => saveCentre(), 'add-cons': t => consModal(t.dataset.id), 'save-cons': t => saveCons(t.dataset.id),
   print: () => window.print(),
   'sv-more': () => { state.sv.n += 15; refresh(); },
   'export-csv': exportCSV, centre: t => centreModal(t.dataset.id),

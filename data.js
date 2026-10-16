@@ -40,7 +40,34 @@ const CENTRES = [
   { id: 'c-manga', nom: 'CHR de Manga', region: 'Centre-Sud', ville: 'Manga', type: 'CHR' },
   { id: 'c-ziniare', nom: 'CMA de Ziniaré', region: 'Plateau-Central', ville: 'Ziniaré', type: 'CMA' },
   { id: 'c-dori', nom: 'CMA de Dori', region: 'Sahel', ville: 'Dori', type: 'CMA' },
-  { id: 'c-gaoua', nom: 'CHR de Gaoua', region: 'Sud-Ouest', ville: 'Gaoua', type: 'CHR' }
+  { id: 'c-gaoua', nom: 'CHR de Gaoua', region: 'Sud-Ouest', ville: 'Gaoua', type: 'CHR' },
+  { id: 'c-paulvi', nom: 'CMA Paul VI', region: 'Centre', ville: 'Ouagadougou', type: 'CMA' },
+  { id: 'c-schiphra', nom: 'CMA Schiphra', region: 'Centre', ville: 'Ouagadougou', type: 'CMA' },
+  { id: 'c-pissy', nom: 'CMA de Pissy', region: 'Centre', ville: 'Ouagadougou', type: 'CMA' },
+  { id: 'c-nouna', nom: 'CMA de Nouna', region: 'Boucle du Mouhoun', ville: 'Nouna', type: 'CMA' },
+  { id: 'c-solenzo', nom: 'CMA de Solenzo', region: 'Boucle du Mouhoun', ville: 'Solenzo', type: 'CMA' },
+  { id: 'c-sindou', nom: 'CMA de Sindou', region: 'Cascades', ville: 'Sindou', type: 'CMA' },
+  { id: 'c-mangodara', nom: 'CMA de Mangodara', region: 'Cascades', ville: 'Mangodara', type: 'CMA' },
+  { id: 'c-koupela', nom: 'CMA de Koupéla', region: 'Centre-Est', ville: 'Koupéla', type: 'CMA' },
+  { id: 'c-garango', nom: 'CMA de Garango', region: 'Centre-Est', ville: 'Garango', type: 'CMA' },
+  { id: 'c-boulsa', nom: 'CMA de Boulsa', region: 'Centre-Nord', ville: 'Boulsa', type: 'CMA' },
+  { id: 'c-kongoussi', nom: 'CMA de Kongoussi', region: 'Centre-Nord', ville: 'Kongoussi', type: 'CMA' },
+  { id: 'c-reo', nom: 'CMA de Réo', region: 'Centre-Ouest', ville: 'Réo', type: 'CMA' },
+  { id: 'c-leo', nom: 'CMA de Léo', region: 'Centre-Ouest', ville: 'Léo', type: 'CMA' },
+  { id: 'c-po', nom: 'CMA de Pô', region: 'Centre-Sud', ville: 'Pô', type: 'CMA' },
+  { id: 'c-kombissiri', nom: 'CMA de Kombissiri', region: 'Centre-Sud', ville: 'Kombissiri', type: 'CMA' },
+  { id: 'c-diapaga', nom: 'CMA de Diapaga', region: 'Est', ville: 'Diapaga', type: 'CMA' },
+  { id: 'c-bogande', nom: 'CMA de Bogandé', region: 'Est', ville: 'Bogandé', type: 'CMA' },
+  { id: 'c-orodara', nom: 'CMA de Orodara', region: 'Hauts-Bassins', ville: 'Orodara', type: 'CMA' },
+  { id: 'c-hounde', nom: 'CMA de Houndé', region: 'Hauts-Bassins', ville: 'Houndé', type: 'CMA' },
+  { id: 'c-yako', nom: 'CMA de Yako', region: 'Nord', ville: 'Yako', type: 'CMA' },
+  { id: 'c-titao', nom: 'CMA de Titao', region: 'Nord', ville: 'Titao', type: 'CMA' },
+  { id: 'c-bousse', nom: 'CMA de Boussé', region: 'Plateau-Central', ville: 'Boussé', type: 'CMA' },
+  { id: 'c-zorgho', nom: 'CMA de Zorgho', region: 'Plateau-Central', ville: 'Zorgho', type: 'CMA' },
+  { id: 'c-djibo', nom: 'CMA de Djibo', region: 'Sahel', ville: 'Djibo', type: 'CMA' },
+  { id: 'c-gorom', nom: 'CMA de Gorom-Gorom', region: 'Sahel', ville: 'Gorom-Gorom', type: 'CMA' },
+  { id: 'c-diebougou', nom: 'CMA de Diébougou', region: 'Sud-Ouest', ville: 'Diébougou', type: 'CMA' },
+  { id: 'c-batie', nom: 'CMA de Batié', region: 'Sud-Ouest', ville: 'Batié', type: 'CMA' }
 ];
 const centreOf = id => CENTRES.find(c => c.id === id) || { nom: id, region: '—' };
 const centreName = id => centreOf(id).nom;
@@ -67,13 +94,13 @@ const NOTES = {
 };
 
 /* ---------- Stockage local ---------- */
-const KEY = 'mammodata.v3';
+const KEY = 'mammodata.v4';
 let DB = null;
 let session = null;
 
 function saveDB() { try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) { /* stockage indisponible */ } }
 function loadDB() {
-  try { const raw = localStorage.getItem(KEY); if (raw) { DB = JSON.parse(raw); return; } } catch (e) { /* ignore */ }
+  try { const raw = localStorage.getItem(KEY); if (raw) { DB = JSON.parse(raw); (DB.customCentres || []).forEach(c => { if (!CENTRES.some(x => x.id === c.id)) CENTRES.push(c); }); return; } } catch (e) { /* ignore */ }
   DB = seedData(); saveDB();
 }
 function resetDB() { try { localStorage.removeItem(KEY); } catch (e) { /* ignore */ } DB = seedData(); saveDB(); }
@@ -103,8 +130,8 @@ function seedData() {
   const MEDS = ['Dr Issouf Compaoré', 'Dr Mariam Zongo', 'Dr Habibou Ouattara', 'Dr Pauline Kaboré', 'Dr Adama Traoré', 'Dr Clarisse Ilboudo', 'Dr Boukary Sawadogo', 'Dr Fatimata Nikiéma', 'Dr Salif Ouédraogo', 'Dr Awa Konaté'];
   const patients = [];
   const W = [14, 12, 7, 8, 7, 7, 6, 6, 6, 6, 6, 5, 5, 5];
-  const WT = W.reduce((a, b) => a + b, 0);
-  const pickCentre = () => { let y = r() * WT; for (let j = 0; j < CENTRES.length; j++) { y -= W[j]; if (y < 0) return CENTRES[j]; } return CENTRES[0]; };
+  const WT = CENTRES.reduce((s, c, j) => s + (W[j] || 3), 0);
+  const pickCentre = () => { let y = r() * WT; for (let j = 0; j < CENTRES.length; j++) { y -= (W[j] || 3); if (y < 0) return CENTRES[j]; } return CENTRES[0]; };
   for (let i = 1; i <= 420; i++) {
     let x = r(), st = 'negatif', acc = 0;
     for (const [k, p] of dist) { acc += p; if (x <= acc) { st = k; break; } }
