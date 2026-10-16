@@ -61,14 +61,16 @@ const ICONS = {
 const ico = n => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n] || ''}</svg>`;
 
 /* ---------- Logo ---------- */
-function logoSvg(size = 40) {
+function logoSvg(size = 50) {
   return `<svg width="${size}" height="${size}" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="lgr" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F78DB0"/><stop offset="1" stop-color="#EC4083"/></linearGradient></defs>
   <path d="M26 5c-11 5-13 22-2 31s17 14 9 22c15-3 20-20 7-31S22 21 26 5z" fill="url(#lgr)"/>
   <ellipse cx="42" cy="30" rx="12" ry="4.500" fill="#6B52B8"/><path d="M30 30v18c0 2.500 5.400 4.500 12 4.500S54 50.500 54 48V30c0 2.500-5.400 4.500-12 4.500S30 32.500 30 30z" fill="#4B3B9A"/></svg>`;
 }
-window.__logoFallback = () => `<div class="deco-login" style="display:flex;align-items:center;gap:10px">${logoSvg(54)}<div style="text-align:left"><b style="font-size:28px;color:#2E2A78">Mammo<span style="color:#EC4083">Data</span></b><div style="font-size:12px;color:#6B6990">Registre numérique du cancer du sein</div></div></div>`;
-const brandImg = () => `<img class="brand-img" src="assets/logo.png" alt="MammoData — Registre numérique du cancer du sein" onerror="this.outerHTML=window.__logoFallback()">`;
-
+const LOGO_SRC = 'assets/logo.jpeg'; // ← adapte au nom réel de ton fichier
+function logoSvg(size = 50) {
+  return `<span class="logo-tile" style="width:${size}px;height:${size}px"><img src="${LOGO_SRC}" alt="Logo MammoData"></span>`;
+}
+const brandImg = () => `<div class="login-brand"><img src="${LOGO_SRC}" alt="Logo MammoData"><div><b>Mammo<span>Data</span></b><small>Registre numérique du cancer du sein</small></div></div>`;
 /* ---------- Toasts, modale ---------- */
 function toast(msg, type = 'ok') {
   const t = document.createElement('div'); t.className = 'toast ' + type; t.innerHTML = `${ico(type === 'ok' ? 'check' : 'alert')}<span>${esc(msg)}</span>`;
@@ -132,6 +134,23 @@ function tileMap(values, f = v => v) {
   }
   return `<div class="tile-map">${cells.join('')}</div><div class="scale"><span>Faible</span><i></i><span>Élevé</span></div><p class="muted small" style="margin:8px 0 0">Carte schématique des 13 régions.</p>`;
 }
+const DONUT_COLORS = ['#2E2A78', '#4B3B9A', '#6B52B8', '#EC4083', '#F78DB0', '#9A8AD6', '#C9C9D9'];
+function donutChart(vals) {
+  const all = Object.entries(vals).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]);
+  const total = all.reduce((s, [, n]) => s + n, 0);
+  if (!total) return '<p class="muted">Aucune donnée.</p>';
+  const items = all.slice(0, 6).map(([l, n]) => ({ l, n }));
+  const rest = all.slice(6).reduce((s, [, n]) => s + n, 0);
+  if (rest) items.push({ l: 'Autres régions', n: rest });
+  const R = 70, C = 2 * Math.PI * R; let off = 0;
+  const arcs = items.map((it, i) => {
+    const len = it.n / total * C;
+    const s = `<circle cx="90" cy="90" r="${R}" fill="none" stroke="${DONUT_COLORS[i]}" stroke-width="26" stroke-dasharray="${len} ${C - len}" stroke-dashoffset="${-off}" transform="rotate(-90 90 90)"><title>${esc(it.l)} : ${it.n}</title></circle>`;
+    off += len; return s;
+  }).join('');
+  return `<div class="donut-wrap"><svg viewBox="0 0 180 180" class="donut" role="img" aria-label="Dépistages par région">${arcs}<text x="90" y="88" text-anchor="middle" class="d-val">${nf(total)}</text><text x="90" y="106" text-anchor="middle" class="d-lab">dépistages</text></svg>
+  <ul class="donut-legend">${items.map((it, i) => `<li><i style="background:${DONUT_COLORS[i]}"></i><span>${esc(it.l)}</span><b>${nf(it.n)} <small>(${Math.round(it.n / total * 100)} %)</small></b></li>`).join('')}</ul></div>`;
+}
 function monthsBack(n) { const out = []; for (let i = n - 1; i >= 0; i--) { const d = new Date(TODAY.getFullYear(), TODAY.getMonth() - i, 1); out.push({ key: `${d.getFullYear()}-${pad(d.getMonth() + 1)}`, label: MOIS[d.getMonth()] }); } return out; }
 const AGE_GROUPS = [['< 30', 0, 29], ['30-39', 30, 39], ['40-49', 40, 49], ['50-59', 50, 59], ['60 +', 60, 200]];
 
@@ -165,27 +184,30 @@ function renderLogin(err = '') {
         ${err ? `<div class="alert err" role="alert">${ico('alert')}<span>${esc(err)}</span></div>` : ''}
         <div class="fld"><label for="lg-id">Identifiant professionnel</label><input id="lg-id" autocomplete="username" placeholder="ex. a.sawadogo"></div>
         <div class="fld"><label for="lg-pw">Mot de passe</label><input id="lg-pw" type="password" autocomplete="current-password" placeholder="••••••••"></div>
-        <div class="fld"><label for="lg-code">Code de vérification (6 chiffres)</label><input id="lg-code" inputmode="numeric" maxlength="6" placeholder="••••••"></div>
-        <div class="fld"><label for="lg-role">Profil de démonstration</label><select id="lg-role">${optList(Object.keys(ROLES).map(k => [k, ROLES[k].label]), 'agent')}</select></div>
+                <div class="fld"><label for="lg-role">Profil de démonstration</label><select id="lg-role">${optList(Object.keys(ROLES).map(k => [k, ROLES[k].label]), 'agent')}</select></div>
         <button class="btn accent" type="submit" style="justify-content:center">Se connecter</button>
         <div class="secure-note">${ico('lock')}<span>Accès réservé au personnel de santé autorisé.</span></div>
-        <div class="hint"><b>Démo :</b> saisissez un identifiant quelconque, un mot de passe d'au moins 6 caractères et le code <b>123456</b>.</div>
       </form></div></div>`;
   $('#lg-id').focus();
 }
 function submitLogin(e) {
   e.preventDefault();
-  const id = $('#lg-id').value.trim(), pw = $('#lg-pw').value, code = $('#lg-code').value.trim(), rl = $('#lg-role').value;
-  if (!id || !pw || !code) return renderLogin('Veuillez renseigner tous les champs.');
+   const id = $('#lg-id').value.trim(), pw = $('#lg-pw').value, rl = $('#lg-role').value;
+  if (!id || !pw) return renderLogin('Veuillez renseigner tous les champs.');
   if (pw.length < 6) return renderLogin('Le mot de passe doit contenir au moins 6 caractères.');
-  if (code !== '123456') return renderLogin('Code de vérification invalide.');
   const u = DB.users.find(x => x.id === DEMO[rl]);
   session = { userId: u.id, name: u.nom, role: u.role, centre: u.centre };
   sessionStorage.setItem('md.session', JSON.stringify(session));
   audit('Connexion', ROLES[u.role].label); resetIdle();
   location.hash = '#/dashboard'; render();
 }
-
+const TICKER = [
+  'Données de santé confidentielles : accès réservé au personnel de santé autorisé',
+  'Toutes les actions sont journalisées',
+  'Vérifiez l\'existence d\'un dossier avant d\'en créer un nouveau',
+  'Octobre Rose : un dépistage précoce sauve des vies'
+];
+const tickerHtml = () => { const g = TICKER.map(t => `<span>${ico('lock')}${esc(t)}</span>`).join(''); return `<div class="ticker" role="status" aria-label="Annonces"><div class="ticker-track"><div class="tk-group">${g}</div><div class="tk-group" aria-hidden="true">${g}</div></div></div>`; };
 /* ---------- Coque de l'application ---------- */
 function buildShell() {
   const r = role(), nb = scoped().filter(p => p.statut === 'suspect').length;
@@ -203,7 +225,7 @@ function buildShell() {
         <div class="profile"><button data-act="profile" aria-haspopup="true"><span class="avatar">${esc(initials(session.name.replace(/^Dr\s/, '')))}</span><span class="pmeta"><b>${esc(session.name)}</b><span>${r.label}</span></span></button>
           <div class="dropdown" id="pmenu" hidden><button data-act="expire">${ico('clock')} Simuler l'expiration de session</button><button data-act="reset">${ico('activity')} Réinitialiser les données de démo</button><button data-act="logout">${ico('logout')} Se déconnecter</button></div></div>
       </header>
-      <div class="conf-bar">${ico('lock')}<span>Données de santé confidentielles — accès réservé au personnel autorisé, toutes les actions sont journalisées.</span></div>
+            ${tickerHtml()}
       <main class="content" id="view" tabindex="-1"></main></div></div>`;
 }
 let renderToken = 0;
@@ -255,9 +277,7 @@ VIEWS.dashboard = (r, v) => {
   <div class="grid g-21" style="margin-bottom:18px">
     <div class="card"><h3>Évolution mensuelle</h3><div class="legend"><span><i style="background:var(--indigo)"></i>Dépistages</span><span><i style="background:var(--rose)"></i>Cas confirmés</span></div>${lineChart(months.map(m => m.label), [{ name: 'Dépistages', color: '#2E2A78', values: dep }, { name: 'Cas confirmés', color: '#EC4083', values: cas }])}</div>
     <div class="card"><h3>Répartition par tranche d'âge</h3><div class="legend"><span><i style="background:var(--violet-l)"></i>Dépistées</span><span><i style="background:var(--rose)"></i>Cas</span></div>${groupedBars(AGE_GROUPS.map(g => g[0]), [{ name: 'Dépistées', color: '#6B52B8', values: ageDep }, { name: 'Cas', color: '#EC4083', values: ageCas }])}</div></div>
-  <div class="grid g2">
-    <div class="card"><h3>Dépistages par région</h3>${tileMap(regVals)}</div>
-    <div class="card"><h3>Centres les plus actifs</h3>${top.map(([id, n]) => `<div class="bar-row"><span>${esc(centreName(id))}</span><div class="tr"><i style="width:${n / topMaxV * 100}%"></i></div><span class="v">${n}</span></div>`).join('')}</div></div>`}`;
+    <div class="card"><h3>Dépistages par région</h3>${donutChart(regVals)}</div>`}`;
 };
 
 /* ---------- Liste des patientes ---------- */
